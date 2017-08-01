@@ -19,7 +19,6 @@
 #define CURRENT_REG         4
 #define CALIBRATION_REG     5
 
-#define STM_ADDRESS         0x60
 #define INA_ADDRESS         0x40
 
 typedef enum {
@@ -34,7 +33,7 @@ op_type operation = OP_DUMP;
 
 int interval = 60;
 int i2c_bus = 1;
-int i2c_address = STM_ADDRESS;
+int i2c_address = INA_ADDRESS;
 int handle;
 int whole_numbers = 0;
 
