@@ -24,12 +24,17 @@ typedef enum
 {
     OP_NONE,
     OP_CHARGE,
+    OP_DISABLE,
+    OP_ENABLE,
     OP_EEPROM,
     OP_SET_TIMEOUT,
     OP_READ_RTC,
     OP_SET_SYSTIME,
     OP_WRITE_RTC,
-    OP_INFO
+    OP_READ_CAL,
+    OP_WRITE_CAL,
+    OP_QUERY,
+    OP_RESET
 } op_type;
 
 op_type operation = OP_NONE;
@@ -39,6 +44,7 @@ int i2c_bus = 1;
 int stm_address = STM_ADDRESS;
 int charge_rate = 1;
 int power_timeout = 0;
+int calibration_value = 0;
 int handle;
 
 
@@ -202,6 +208,22 @@ int command_wait( uint8_t command )
 }
 
 
+int command_read8( uint8_t command, uint8_t *data )
+{
+    int rc = -1;
+    
+    if ( command_wait( command ) == 0 )
+    {
+        if ( register_read( REG_DATA_0, data ) == 0 )
+        {
+            rc = 0;
+        }
+    }
+    
+    return rc;
+}
+
+
 int command_read32( uint8_t command, uint32_t *data )
 {
     int rc = -1;
@@ -248,6 +270,32 @@ int verify_product( void )
     }
     
     return rc;
+}
+
+
+void print_duration( uint32_t seconds )
+{
+    int d, h, m, s;
+    
+    d = h = m = s = 0;
+    
+    if ( seconds > 86400 )
+    {
+        d = seconds / 86400;
+        seconds -= ( d * 86400 );
+        printf( "%d days and ", d );
+    }
+    if ( seconds > 3600 )
+    {
+        h = seconds / 3600;
+        seconds -= ( 3600 * h );
+    }
+    if ( seconds > 60 )
+    {
+        m = seconds / 60;
+        seconds -= ( 60 * m );
+    }
+    printf( "%02d:%02d:%02d", h, m, s );
 }
 
 
@@ -300,7 +348,7 @@ int cape_show_cape_info( void )
     
     if ( register_read( REG_PROD, &product ) == 0 )
     {
-        printf( "\nProduct   : " );
+        printf( "\nProduct      : " );
         if ( product == PROD_POWERCAPE ) printf( "PowerCape" );
         else if ( product == PROD_POWERHAT ) printf( "PowerHAT" );
         else if ( product == PROD_POWERMODULE ) printf( "Power Module" );
@@ -314,7 +362,7 @@ int cape_show_cape_info( void )
     
     if ( register_read( REG_REVISION, &revision ) == 0 )
     {
-        printf( "Revision  : " );
+        printf( "Revision     : " );
         if ( step == 0 ) printf( "P" );
         else printf( "%c", '@'+step );
         printf( "%c", '0'+revision );
@@ -326,35 +374,60 @@ int cape_show_cape_info( void )
         return -1;
     if ( register_read( REG_VERSION_MINOR, &ver_min ) != 0 )
         return -1;
-    printf( "Interface : v%d.%d\n", ver_maj, ver_min );
-    
+    printf( "Interface    : v%d.%d\n", ver_maj, ver_min );
+
     if ( command_read32( COMMAND_FIRMWARE_TIMESTAMP, &time ) == 0 )
     {
-        printf( "Firmware  : %s", ctime( (time_t*)&time ) );
+        printf( "Firmware     : %s", ctime( (time_t*)&time ) );
     }
     else return -1;    
     
+    if ( command_read8( COMMAND_GET_CHARGE_RATE, &c ) == 0 )
+    {
+        printf( "Charge rate  : %d/3 amp\n", c );
+    }
+    else return -1;    
+    
+    if ( command_read32( COMMAND_GET_RESTART_TIME, &time ) == 0 )
+    {
+        printf( "Restart time : %d seconds (", time );
+        print_duration( time );
+        printf( ")\n" );
+    }
+    else return -1;    
+
     if ( command_read32( COMMAND_GET_ONTIME, &time ) == 0 )
     {
-        printf( "On time   : %d\n", time );
+        printf( "On time      : " );
+        print_duration( time );
+        printf( "\n" );
     }
     else return -1;    
     
     if ( command_read32( COMMAND_GET_OFFTIME, &time ) == 0 )
     {
-        printf( "Off time  : %d\n", time );
+        printf( "Off time     : " );
+        print_duration( time );
+        printf( "\n" );
     }
     else return -1;    
 
     if ( register_read( REG_START_REASON, &c ) == 0 )
     {
         printf( "Powered on triggered by " );
-        if ( c & START_BUTTON ) printf( "button press " );
-        if ( c & START_EXTERNAL ) printf( "external event " );
-        if ( c & START_PWRGOOD ) printf( "power good " );
-        if ( c & START_TIMEOUT ) printf( "timer" );
-        if ( c & START_PWR_ON ) printf( "inital power" );
-        if ( c & START_WDT_RESET ) printf( "watchdog reset" );
+        if ( c == 0 ) 
+        {
+            printf( "unknown " );
+        }
+        else
+        {
+            if ( c & START_BUTTON ) printf( "button press " );
+            if ( c & START_EXTERNAL ) printf( "external event " );
+            if ( c & START_PWRGOOD ) printf( "power good " );
+            if ( c & START_TIMEOUT ) printf( "timer" );
+            if ( c & START_PWR_ON ) printf( "inital power" );
+            if ( c & START_WDT_RESET ) printf( "watchdog reset" );
+        }
         printf ( "\n\n" );
     }
     else return -1;
@@ -387,19 +460,99 @@ int cape_write_timeout( void )
 }
 
 
+int cape_read_calibration( void )
+{
+    int rc = 1;
+    uint32_t value;
+    int i;
+
+    if ( command_read32( COMMAND_GET_RTC_CAL, &value ) == 0 )
+    {
+        if ( value & 0x8000 )
+        {
+            i = 512 - ( value & 0x1FF );
+        }
+        else
+        {
+            i = 0 - ( value & 0x1FF );
+        }
+        printf( "Cape RTC calibration %04X (%d)\n", value, i );
+        rc = 0;
+    }
+    else fprintf( stderr, "Error reading RTC calibration value\n" );
+
+    return rc;
+    
+}
+
+
+int cape_write_calibration( void )
+{
+    int rc = 1;
+    uint32_t v;
+
+    if ( calibration_value > 0 )
+    {
+        v = ( 512 - calibration_value ) | 0x8000;
+    }
+    else
+    {
+        v = abs( calibration_value ) & 0x1FF;
+    }
+    printf( "Setting calibration value %d (%04X)\n", calibration_value, v );
+    
+    if ( command_write32( COMMAND_SET_RTC_CAL, v ) == 0 )
+    {
+        rc = 0;
+    }
+    else fprintf( stderr, "Error writing RTC calibration value\n" );
+
+    return rc;
+}
+
+
+int cape_write_eeprom( void )
+{
+    return command_wait( COMMAND_EEPROM_STORE );
+}
+
+
+int cape_reset( void )
+{
+    return command_wait( COMMAND_REBOOT );
+}
+
+
+int cape_enable_charger( void )
+{
+    return command_wait( COMMAND_CHARGE_ENABLE );
+}
+
+
+int cape_disable_charger( void )
+{
+    return command_wait( COMMAND_CHARGE_DISABLE );
+}
+
+
 void show_usage( char *progname )
 {
     fprintf( stderr, "Usage: %s [OPTION] \n", progname );
     fprintf( stderr, "   Options:\n" );
     fprintf( stderr, "      -h --help           Show usage.\n" );
     fprintf( stderr, "      -a --address <addr> Use I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
-    fprintf( stderr, "      -c --charge <1-3>   Set charge rate in thirds of an amp.\n" );
-    fprintf( stderr, "      -e --eeprom         Store current setting in EEPROM.\n" );
-    fprintf( stderr, "      -i --info           Show board info.\n" );
+    fprintf( stderr, "      -b --battery <1-3>  Set battery charge rate in thirds of an amp.\n" );
+    fprintf( stderr, "      -C --enable         Charger enable.\n" );
+    fprintf( stderr, "      -c --disable        Charger disable (power will be lost if no battery!).\n" );
+    fprintf( stderr, "      -e --eeprom         Store current settings in EEPROM.\n" );
+    fprintf( stderr, "      -q --query          Query board info.\n" );
     fprintf( stderr, "      -t --timeout        Set power-on timeout value.\n" );
     fprintf( stderr, "      -r --read           Read and display board RTC value.\n" );
     fprintf( stderr, "      -s --set            Set system time from RTC.\n" );
     fprintf( stderr, "      -w --write          Write RTC from system time.\n" );
+    fprintf( stderr, "      -X --calibrate      Set RTC calibration value.\n" );
+    fprintf( stderr, "      -x                  Read RTC calibration value.\n" );
+    fprintf( stderr, "      -z --reset          Reset power controller.\n" );
     fprintf( stderr, "\n" );
     exit( 1 );
 }
@@ -413,18 +566,22 @@ void parse( int argc, char *argv[] )
         {
             { "help",       0,  NULL,   'h'   },
             { "address",    1,  NULL,   'a'   },
-            { "charge",     1,  NULL,   'c'   },
+            { "battery",    1,  NULL,   'b'   },
+            { "disable",    0,  NULL,   'c'   },
+            { "enable",     0,  NULL,   'C'   },
             { "eeprom",     0,  NULL,   'e'   },
-            { "info",       0,  NULL,   'i'   },
+            { "query",      0,  NULL,   'q'   },
             { "timeout",    1,  NULL,   't'   },
             { "read",       0,  NULL,   'r'   },
             { "set",        0,  NULL,   's'   },
             { "write",      0,  NULL,   'w'   },
+            { "calibrate",  1,  NULL,   'X'   },
+            { "reset",      0,  NULL,   'z'   },
             { NULL,         0,  NULL,    0    },
         };
         int c;
 
-        c = getopt_long( argc, argv, "ha:c:it:rsw", lopts, NULL );
+        c = getopt_long( argc, argv, "ha:b:cCeqt:rswxX:z", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -447,7 +604,7 @@ void parse( int argc, char *argv[] )
                 break;
             }
             
-            case 'c':
+            case 'b':
             {
                 int i;
                 
@@ -465,15 +622,27 @@ void parse( int argc, char *argv[] )
                 break;
             }
             
+            case 'c':
+            {
+                operation = OP_DISABLE;
+                break;
+            }
+            
+            case 'C':
+            {
+                operation = OP_ENABLE;
+                break;
+            }
+
             case 'e':
             {
                 operation = OP_EEPROM;
                 break;
             }
             
-            case 'i':
+            case 'q':
             {
-                operation = OP_INFO;
+                operation = OP_QUERY;
                 break;
             }
 
@@ -499,6 +668,34 @@ void parse( int argc, char *argv[] )
             case 'w':
             {
                 operation = OP_WRITE_RTC;
+                break;
+            }
+
+            case 'x':
+            {
+                operation = OP_READ_CAL;
+                break;
+            }
+
+            case 'X':
+            {
+                // Range is 512 to -511 CLK pulses
+                calibration_value = atoi( optarg );
+                if ( ( calibration_value <= 512 ) && ( calibration_value >= -511 ) )
+                {
+                    operation = OP_WRITE_CAL;
+                }
+                else
+                {
+                    fprintf( stderr, "Invalid calibration value\n" );
+                    operation = OP_NONE;
+                }
+                break;
+            }
+
+            case 'z':
+            {
+                operation = OP_RESET;
                 break;
             }
 
@@ -554,7 +751,7 @@ int main( int argc, char *argv[] )
     
     switch ( operation )
     {
-        case OP_INFO:
+        case OP_QUERY:
         {
             rc = cape_show_cape_info();
             break;
@@ -563,6 +760,24 @@ int main( int argc, char *argv[] )
         case OP_CHARGE:
         {
             rc = cape_set_charge_rate();
+            break;
+        }
+
+        case OP_ENABLE:
+        {
+            rc = cape_enable_charger();
+            break;
+        }
+        
+        case OP_DISABLE:
+        {
+            rc = cape_disable_charger();
+            break;
+        }
+        
+        case OP_EEPROM:
+        {
+            rc = cape_write_eeprom();
             break;
         }
         
@@ -598,6 +813,24 @@ int main( int argc, char *argv[] )
         case OP_WRITE_RTC:
         {
             rc = cape_write_rtc();
+            break;
+        }
+        
+        case OP_READ_CAL:
+        {
+            rc = cape_read_calibration();
+            break;
+        }
+
+        case OP_WRITE_CAL:
+        {
+            rc = cape_write_calibration();
+            break;
+        }
+
+        case OP_RESET:
+        {
+            rc = cape_reset();
             break;
         }
 
