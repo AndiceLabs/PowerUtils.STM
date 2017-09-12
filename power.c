@@ -275,9 +275,9 @@ int verify_product( void )
 
 void print_duration( uint32_t seconds )
 {
-    int d, h, m, s;
+    int d, h, m;
     
-    d = h = m = s = 0;
+    d = h = m = 0;
     
     if ( seconds > 86400 )
     {
@@ -295,7 +295,7 @@ void print_duration( uint32_t seconds )
         m = seconds / 60;
         seconds -= ( 60 * m );
     }
-    printf( "%02d:%02d:%02d", h, m, s );
+    printf( "%02d:%02d:%02d", h, m, seconds );
 }
 
 
