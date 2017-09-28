@@ -60,7 +60,7 @@ int i2c_read ( void *buf, int len )
 
     if ( read ( handle, buf, len ) != len )
     {
-        printf ( "I2C read failed: %s\n", strerror ( errno ) );
+        fprintf ( stderr, "I2C read failed: %s\n", strerror ( errno ) );
         rc = -1;
     }
 
@@ -74,7 +74,7 @@ int i2c_write( void *buf, int len )
 
     if ( write( handle, buf, len ) != len )
     {
-        printf( "I2C write failed: %s\n", strerror ( errno ) );
+        fprintf( stderr, "I2C write failed: %s\n", strerror ( errno ) );
         rc = -1;
     }
 
@@ -539,20 +539,26 @@ void show_usage( char *progname )
 {
     fprintf( stderr, "Usage: %s [OPTION] \n", progname );
     fprintf( stderr, "   Options:\n" );
-    fprintf( stderr, "      -h --help           Show usage.\n" );
-    fprintf( stderr, "      -a --address <addr> Use I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
-    fprintf( stderr, "      -b --battery <1-3>  Set battery charge rate in thirds of an amp.\n" );
-    fprintf( stderr, "      -C --enable         Charger enable.\n" );
-    fprintf( stderr, "      -c --disable        Charger disable (power will be lost if no battery!).\n" );
-    fprintf( stderr, "      -e --eeprom         Store current settings in EEPROM.\n" );
-    fprintf( stderr, "      -q --query          Query board info.\n" );
-    fprintf( stderr, "      -t --timeout        Set power-on timeout value.\n" );
-    fprintf( stderr, "      -r --read           Read and display board RTC value.\n" );
-    fprintf( stderr, "      -s --set            Set system time from RTC.\n" );
-    fprintf( stderr, "      -w --write          Write RTC from system time.\n" );
-    fprintf( stderr, "      -X --calibrate      Set RTC calibration value.\n" );
-    fprintf( stderr, "      -x                  Read RTC calibration value.\n" );
-    fprintf( stderr, "      -z --reset          Reset power controller.\n" );
+    fprintf( stderr, "      -h --help               Show usage.\n" );
+    fprintf( stderr, "      -a --address <addr>     Use I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
+    fprintf( stderr, "      -b --battery <1-3>      Set battery charge rate in thirds of an amp.\n" );
+    fprintf( stderr, "      -C --enable             Charger enable.\n" );
+    fprintf( stderr, "      -c --disable            Charger disable (power will be lost if no battery!).\n" );
+    fprintf( stderr, "      -e --eeprom             Store current settings in EEPROM.\n" );
+    fprintf( stderr, "      -q --query              Query board info.\n" );
+    fprintf( stderr, "      -t --timeout            Set power-on timeout value.\n" );
+    fprintf( stderr, "      -r --read               Read and display board RTC value.\n" );
+    fprintf( stderr, "      -R --set                Set system time from RTC.\n" );
+    fprintf( stderr, "      -v --value <setting>    Return numeric value (for scripts) of:\n" );
+    fprintf( stderr, "                  button        Button pressed (0-1)\n" );
+    fprintf( stderr, "                  pgood         DC power good (0-1)\n" );
+    fprintf( stderr, "                  rate          Charge rate (1-3)\n" );
+    fprintf( stderr, "                  ontime        Power duration (seconds)\n" );
+    fprintf( stderr, "                  offtime       Last power off duration (seconds)\n" );
+    fprintf( stderr, "      -w --write              Write RTC from system time.\n" );
+    fprintf( stderr, "      -X --calibrate          Set RTC calibration value.\n" );
+    fprintf( stderr, "      -x                      Read RTC calibration value.\n" );
+    fprintf( stderr, "      -z --reset              Restart power controller.\n" );
     fprintf( stderr, "\n" );
     exit( 1 );
 }
@@ -581,7 +587,7 @@ void parse( int argc, char *argv[] )
         };
         int c;
 
-        c = getopt_long( argc, argv, "ha:b:cCeqt:rswxX:z", lopts, NULL );
+        c = getopt_long( argc, argv, "ha:b:cCeqt:rRwxX:z", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -659,7 +665,7 @@ void parse( int argc, char *argv[] )
                 break;
             }
 
-            case 's':
+            case 'R':
             {
                 operation = OP_SET_SYSTIME;
                 break;
