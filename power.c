@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <ctype.h>
 #include <errno.h>
 #include <endian.h>
 #include <string.h>
@@ -9,6 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
 #include <fcntl.h>
 #include <linux/i2c-dev.h>
 #include "regs.h"
@@ -304,7 +306,7 @@ int cape_read_rtc( time_t *iptr )
     int rc = 1;
     uint32_t seconds;
 
-    if ( command_read32( COMMAND_READ_RTC, &seconds ) == 0 )
+    if ( command_read32( COMMAND_READ_COUNT, &seconds ) == 0 )
     {
         printf( "Cape RTC seconds %08X (%d)\n", seconds, seconds );
         printf( ctime( (time_t*)&seconds ) );
@@ -329,7 +331,7 @@ int cape_write_rtc( void )
     printf( "System seconds %08X (%d)\n", seconds, seconds );
     printf( ctime( (time_t*)&seconds ) );
 
-    if ( command_write32( COMMAND_WRITE_RTC, seconds ) == 0 )
+    if ( command_write32( COMMAND_WRITE_COUNT, seconds ) == 0 )
     {
         rc = 0;
     }
@@ -344,7 +346,7 @@ int cape_show_cape_info( void )
     uint8_t c;
     uint8_t product, step, revision;
     uint8_t ver_maj, ver_min;
-    uint32_t time;
+    uint32_t time, d;
     
     if ( register_read( REG_PROD, &product ) == 0 )
     {
@@ -362,11 +364,10 @@ int cape_show_cape_info( void )
     
     if ( register_read( REG_REVISION, &revision ) == 0 )
     {
-        printf( "Revision     : " );
-        if ( step == 0 ) printf( "P" );
-        else printf( "%c", '@'+step );
-        printf( "%c", '0'+revision );
-        printf( "\n" );
+        if ( isprint( step ) && isprint( revision ) )
+        {
+            printf( "Revision     : %c%c\n", step, revision );
+        }
     }
     else return -1;
     
@@ -376,6 +377,24 @@ int cape_show_cape_info( void )
         return -1;
     printf( "Interface    : v%d.%d\n", ver_maj, ver_min );
 
+    if ( command_read32( COMMAND_GET_SERIAL, &d ) == 0 )
+    {
+        int i;
+        char ser[4];
+        
+        for( i=0; i<4; i++ )
+        {
+            ser[i] = d & 0xFF;
+            d >>= 8;
+        }
+        printf( "HW Serial#   : %c%c%c%c\n", ser[3], ser[2], ser[1], ser[0] );
+    }
+    
+    if ( command_read32( COMMAND_GET_TIMESTAMP, &time ) == 0 )
+    {
+        printf( "HW Build     : %s\n", ctime( (time_t*)&time ) );
+    }
+    
     if ( command_read32( COMMAND_FIRMWARE_TIMESTAMP, &time ) == 0 )
     {
         printf( "Firmware     : %s", ctime( (time_t*)&time ) );
@@ -541,7 +560,8 @@ void show_usage( char *progname )
     fprintf( stderr, "   Options:\n" );
     fprintf( stderr, "      -h --help               Show usage.\n" );
     fprintf( stderr, "      -a --address <addr>     Use I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
-    fprintf( stderr, "      -b --battery <1-3>      Set battery charge rate in thirds of an amp.\n" );
+    fprintf( stderr, "      -b --bus <bus>          Use I2C <bus> instead of %d.\n", i2c_bus );
+    fprintf( stderr, "      -B --battery <1-3>      Set battery charge rate in thirds of an amp.\n" );
     fprintf( stderr, "      -C --enable             Charger enable.\n" );
     fprintf( stderr, "      -c --disable            Charger disable (power will be lost if no battery!).\n" );
     fprintf( stderr, "      -e --eeprom             Store current settings in EEPROM.\n" );
@@ -572,7 +592,8 @@ void parse( int argc, char *argv[] )
         {
             { "help",       0,  NULL,   'h'   },
             { "address",    1,  NULL,   'a'   },
-            { "battery",    1,  NULL,   'b'   },
+            { "bus",        1,  NULL,   'b'   },
+            { "battery",    1,  NULL,   'B'   },
             { "disable",    0,  NULL,   'c'   },
             { "enable",     0,  NULL,   'C'   },
             { "eeprom",     0,  NULL,   'e'   },
@@ -587,7 +608,7 @@ void parse( int argc, char *argv[] )
         };
         int c;
 
-        c = getopt_long( argc, argv, "ha:b:cCeqt:rRwxX:z", lopts, NULL );
+        c = getopt_long( argc, argv, "ha:b:B:cCeqt:rRwxX:z", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -611,6 +632,20 @@ void parse( int argc, char *argv[] )
             }
             
             case 'b':
+            {
+                int i;
+                
+                errno = 0;
+                i = (int)strtol( optarg, NULL, 0 );
+                if ( errno == 0 )
+                {
+                    i2c_bus = i;
+                    printf( "Using I2C bus %d\n", i2c_bus );
+                }
+                break;
+            }
+
+            case 'B':
             {
                 int i;
                 

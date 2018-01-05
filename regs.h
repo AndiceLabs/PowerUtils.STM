@@ -85,12 +85,15 @@ enum registers_type {
 #define COMMAND_SET_CHARGE_RATE_2   0x1D
 #define COMMAND_SET_CHARGE_RATE_3   0x1E
 #define COMMAND_FIRMWARE_TIMESTAMP  0x1F
-#define COMMAND_READ_RTC            0x20
-#define COMMAND_WRITE_RTC           0x21
+#define COMMAND_READ_COUNT          0x20
+#define COMMAND_WRITE_COUNT         0x21
 #define COMMAND_SET_I2C_ADDRESS     0x22
+#define COMMAND_SET_RTC_ADDRESS     0x23
 
 #define COMMAND_GET_RTC_CAL         0x30
 #define COMMAND_SET_RTC_CAL         0x31
+#define COMMAND_GET_TIMESTAMP       0x32
+#define COMMAND_GET_SERIAL          0x33
 #define COMMAND_EEPROM_CLEAR        0x3C
 #define COMMAND_EEPROM_STORE        0x3E
 
