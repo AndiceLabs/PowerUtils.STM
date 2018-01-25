@@ -2,6 +2,29 @@
 #define __REGS_H__
 
 //
+// Bootloader registers
+//
+enum boot_regs_type {
+    BOOT_REG_ID,
+    BOOT_REG_LEVEL,
+    BOOT_REG_STATUS,
+    BOOT_REG_CMD,
+    BOOT_REG_ADDR,
+    BOOT_REG_DATA,
+    BOOT_REG_END,
+    BOOT_NUM_REGS
+};
+
+enum boot_command_type {
+    BOOT_CMD_NOP = 0,
+    BOOT_CMD_PAGE_ERASE,
+    BOOT_CMD_FULL_ERASE,
+    BOOT_CMD_HALF_PAGE_PROG,
+    BOOT_CMD_EXECUTE,
+    BOOT_CMD_ERROR = 0xEE,
+};
+
+//
 // Firmware version is tied to registers and commands
 //
 #define FIRMWARE_MAJOR      0
@@ -48,6 +71,9 @@ enum registers_type {
 #define STATUS_POWER_GOOD           0x01    // PG state 
 #define STATUS_BUTTON               0x02    // Button state
 #define STATUS_OPTO                 0x04    // Opto state
+#define STATUS_FLASH_LOCK           0x20    // 
+#define STATUS_MFG_LOCK             0x40    // 
+#define STATUS_BOOTLOADER           0x80    // Capability
 
 // REG_CONTROL
 #define CONTROL_AUX_OUTPUT          0x01
@@ -98,6 +124,7 @@ enum registers_type {
 #define COMMAND_EEPROM_STORE        0x3E
 
 #define COMMAND_REBOOT              0xBB
+#define COMMAND_ENTER_BOOTLOADER    0xEB
 
 
 #endif  // __REGS_H__

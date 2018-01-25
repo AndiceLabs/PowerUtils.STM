@@ -15,6 +15,9 @@
 #include <linux/i2c-dev.h>
 #include "regs.h"
 
+#define BLOCK_I2C_WRITE     16
+#define I2C_DELAY_MS        50
+
 #define STM_ADDRESS         0x60
 #define INA_ADDRESS         0x40
 
@@ -36,7 +39,8 @@ typedef enum
     OP_READ_CAL,
     OP_WRITE_CAL,
     OP_QUERY,
-    OP_RESET
+    OP_RESET,
+    OP_UPLOAD,
 } op_type;
 
 op_type operation = OP_NONE;
@@ -48,6 +52,12 @@ int charge_rate = 1;
 int power_timeout = 0;
 int calibration_value = 0;
 int handle;
+
+#define MAX_IMAGE_SIZE      ( 1024 * 16 )
+#define FLASH_PAGE_SIZE     ( 128 )
+#define HALF_PAGE_SIZE      ( FLASH_PAGE_SIZE / 2 )
+char *filename;
+int  filehandle;
 
 
 void msleep ( int msecs )
@@ -187,6 +197,30 @@ int register_write( unsigned char reg, unsigned char data )
 }
 
 
+int register_block_write( unsigned char reg, unsigned char *data, unsigned char len )
+{
+    int i;
+    int rc = -1;
+    unsigned char bites[ BLOCK_I2C_WRITE+1 ];
+
+    if ( len > BLOCK_I2C_WRITE )
+        return rc;
+    
+    bites[ 0 ] = reg;
+    for ( i=0; i<len; i++ )
+    {
+        bites[ i+1 ] = *data++;
+    }
+
+    if ( i2c_write( bites, len+1 ) == 0 )
+    {
+        rc = 0;
+    }
+
+    return rc;
+}
+
+
 int command_wait( uint8_t command )
 {
     uint8_t r = 0xEE;
@@ -265,7 +299,7 @@ int verify_product( void )
     
     if ( register_read( REG_ID, &c ) == 0 )
     {
-        if ( c == 0xED )
+        if ( c == 0xED ) 
         {
             rc = 1;
         }
@@ -554,6 +588,154 @@ int cape_disable_charger( void )
 }
 
 
+void boot_erase_flash( uint8_t addr )
+{
+    register_write( BOOT_REG_ADDR, addr );
+    msleep(1);
+    register_write( BOOT_REG_CMD, BOOT_CMD_PAGE_ERASE );
+}
+
+
+void boot_program_flash( uint8_t addr, uint8_t *data )
+{
+    int i;
+    
+    register_write( BOOT_REG_ADDR, addr );
+    msleep(1);
+    for ( i = 0; i < HALF_PAGE_SIZE; i += BLOCK_I2C_WRITE )
+    {
+        register_block_write( BOOT_REG_DATA, data, BLOCK_I2C_WRITE );
+        data += BLOCK_I2C_WRITE;
+        msleep(1);
+    }
+    register_write( BOOT_REG_CMD, BOOT_CMD_HALF_PAGE_PROG );
+}
+
+
+int boot_enter( void )
+{
+    uint8_t b = 0;
+    int rc = 0;
+    
+    register_read( REG_ID, &b );
+    if ( b != 0xBB )
+    {
+        register_read( REG_STATUS, &b );
+        if ( b & STATUS_BOOTLOADER )
+        {
+            printf( "Entering bootloader...\n" );
+            
+            if ( command_wait( COMMAND_ENTER_BOOTLOADER ) == 0 )
+            {
+                msleep( 300 );
+                
+                register_read( REG_ID, &b );
+                if ( b == 0xBB )
+                {
+                    printf( "Done.\n" );
+                }
+                else
+                {
+                    printf( "Failed.\n" );
+                    rc = 1;
+                }
+            }
+            else
+            {
+                fprintf( stderr, "Bootloader entry failed.\n" );
+                rc = 1;
+            }
+        }
+        else
+        {
+            fprintf( stderr, "Bootloader not present!\n" );
+            rc = 1;
+        }
+    }
+    else
+    {
+        printf( "Found bootloader.\n" );
+    }
+    
+    return rc;
+}
+
+
+void boot_execute( void )
+{
+    register_write( BOOT_REG_CMD, BOOT_CMD_EXECUTE );
+}
+
+
+int boot_upload( void )
+{
+    int fsize, count;
+    void *memblock;
+    uint8_t *ptr;
+    uint8_t halfpage = 0;
+    int rc = 0;
+    
+    if ( boot_enter() != 0 )
+    {
+        return 1;
+    }
+    
+    filehandle = open( filename, O_RDONLY );
+    
+    if ( filehandle < 0 )
+    {
+        fprintf( stderr, "Error opening file %s\n", filename );
+        return 3;
+    }
+    
+    memblock = calloc( MAX_IMAGE_SIZE, 1 );
+    if ( !memblock )
+    {
+        fprintf( stderr, "Error allocating memory\n" );
+        return 3;
+    }
+    
+    fsize = read( filehandle, memblock, MAX_IMAGE_SIZE );
+    close( filehandle );
+    printf( "%d bytes read\n", fsize );
+    
+    if ( *(uint32_t*)memblock != 0x200007FF )
+    {
+        ptr = memblock;
+        while ( fsize > 0 )
+        {
+            boot_erase_flash( halfpage );
+            msleep( I2C_DELAY_MS );
+            
+            boot_program_flash( halfpage, ptr );
+            msleep( I2C_DELAY_MS );
+            
+            halfpage++;
+            ptr += HALF_PAGE_SIZE;
+            fsize -= HALF_PAGE_SIZE;
+            if ( fsize < 0 ) break;
+            
+            boot_program_flash( halfpage, ptr );
+            msleep( I2C_DELAY_MS );
+            
+            halfpage++;
+            ptr += HALF_PAGE_SIZE;
+            fsize -= HALF_PAGE_SIZE;
+        }
+        
+        boot_execute();
+    }
+    else
+    {
+        fprintf( stderr, "Error: image not encoded\n" );
+        rc = 2;
+    }
+    
+    free( memblock );
+    return rc;
+}
+
+
 void show_usage( char *progname )
 {
     fprintf( stderr, "Usage: %s [OPTION] \n", progname );
@@ -579,6 +761,7 @@ void show_usage( char *progname )
     fprintf( stderr, "      -X --calibrate          Set RTC calibration value.\n" );
     fprintf( stderr, "      -x                      Read RTC calibration value.\n" );
     fprintf( stderr, "      -z --reset              Restart power controller.\n" );
+    fprintf( stderr, "      -Z --upload <file>      Upload firmware image.\n" );
     fprintf( stderr, "\n" );
     exit( 1 );
 }
@@ -604,11 +787,12 @@ void parse( int argc, char *argv[] )
             { "write",      0,  NULL,   'w'   },
             { "calibrate",  1,  NULL,   'X'   },
             { "reset",      0,  NULL,   'z'   },
+            { "upload",     1,  NULL,   'Z'   },
             { NULL,         0,  NULL,    0    },
         };
         int c;
 
-        c = getopt_long( argc, argv, "ha:b:B:cCeqt:rRwxX:z", lopts, NULL );
+        c = getopt_long( argc, argv, "?a:b:B:cCdeh:mn:qrRs:t:wxX:zZ:", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -740,7 +924,13 @@ void parse( int argc, char *argv[] )
                 break;
             }
 
-            case 'h':
+            case 'Z':
+            {
+                operation = OP_UPLOAD;
+                filename = optarg;
+                break;
+            }
+
             case '?':
             {
                 operation = OP_NONE;
@@ -779,15 +969,18 @@ int main( int argc, char *argv[] )
         exit( 1 );
     }
 
-    if ( verify_product() )
+    if ( operation != OP_UPLOAD )
     {
-        printf( "Board found at address 0x%X\n", stm_address );
-    }
-    else
-    {
-        close( handle );
-        fprintf( stderr, "No board found at 0x%X\n", stm_address );
-        exit( 1 );
+        if ( verify_product() )
+        {
+            printf( "Board found at address 0x%X\n", stm_address );
+        }
+        else
+        {
+            close( handle );
+            fprintf( stderr, "No board found at 0x%X\n", stm_address );
+            exit( 1 );
+        }
     }
     
     switch ( operation )
@@ -872,6 +1065,12 @@ int main( int argc, char *argv[] )
         case OP_RESET:
         {
             rc = cape_reset();
+            break;
+        }
+        
+        case OP_UPLOAD:
+        {
+            rc = boot_upload();
             break;
         }
 
