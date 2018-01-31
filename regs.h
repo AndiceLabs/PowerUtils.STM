@@ -27,8 +27,8 @@ enum boot_command_type {
 //
 // Firmware version is tied to registers and commands
 //
-#define FIRMWARE_MAJOR      0
-#define FIRMWARE_MINOR      9
+#define FIRMWARE_MAJOR      1
+#define FIRMWARE_MINOR      0
 
 
 enum registers_type {
@@ -81,7 +81,7 @@ enum registers_type {
 #define CONTROL_CHARGE_ENABLE       0x04
 #define CONTROL_IGNORE_POWEROFF     0x08
 
-// START enable and reason register bits
+// START_ENABLE and START_REASON register bits
 #define START_BUTTON                0x01    // External (power) button
 #define START_EXTERNAL              0x02    // External (opto) signal
 #define START_PWRGOOD               0x04    // DC power for battery charger products

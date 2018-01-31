@@ -31,6 +31,8 @@ typedef enum
     OP_CHARGE,
     OP_DISABLE,
     OP_ENABLE,
+    OP_CHARGE_DISABLE,
+    OP_CHARGE_ENABLE,
     OP_EEPROM,
     OP_SET_TIMEOUT,
     OP_READ_RTC,
@@ -44,7 +46,7 @@ typedef enum
 } op_type;
 
 op_type operation = OP_NONE;
-
+char *oper_arg = NULL;
 
 int i2c_bus = 1;
 int stm_address = STM_ADDRESS;
@@ -470,7 +472,7 @@ int cape_show_cape_info( void )
         printf( "Powered on triggered by " );
         if ( c == 0 ) 
         {
-            printf( "unknown " );
+            printf( "nothing " );
         }
         else
         {
@@ -485,6 +487,100 @@ int cape_show_cape_info( void )
     }
     else return -1;
     
+    return 0;
+}
+
+
+int get_enable_mask( uint8_t *mask )
+{
+    if ( strcasecmp( oper_arg, "button" ) == 0 )
+    {
+        *mask = START_BUTTON;        
+    }
+    else if ( strcasecmp( oper_arg, "opto" ) == 0 )
+    {
+        *mask = START_EXTERNAL;        
+    }
+    else if ( strcasecmp( oper_arg, "pgood" ) == 0 )
+    {
+        *mask = START_PWRGOOD;        
+    }
+    else if ( strcasecmp( oper_arg, "timeout" ) == 0 )
+    {
+        *mask = START_TIMEOUT;        
+    }
+    else if ( strcasecmp( oper_arg, "poweron" ) == 0 )
+    {
+        *mask = START_PWR_ON;
+    }
+    else
+    {
+        return -1;
+    }
+    return 0;
+}
+
+
+int cape_enable_setting( void )
+{
+    uint8_t mask, b;
+
+    if ( get_enable_mask( &mask ) != 0 )
+    {
+        fprintf( stderr, "Unknown enable setting: %s.\n", oper_arg );
+        return -1;
+    }        
+    
+    if ( register_read( REG_START_ENABLE, &b ) == 0 )
+    {
+        if ( ( b & mask ) == 0 )
+        {
+            register_write( REG_START_ENABLE, b | mask );
+            printf( "Start on %s enabled\n", oper_arg );
+        }
+        else
+        {
+            printf( "Start on %s already enabled\n", oper_arg );
+        }
+    }
+    else
+    {
+        fprintf( stderr, "Error accessing start register\n" );
+        return -1;
+    }
+
+    return 0;
+}
+
+
+int cape_disable_setting( void )
+{
+    uint8_t mask, b;
+
+    if ( get_enable_mask( &mask ) != 0 )
+    {
+        fprintf( stderr, "Unknown disable setting: %s.\n", oper_arg );
+        return -1;
+    }        
+    
+    if ( register_read( REG_START_ENABLE, &b ) == 0 )
+    {
+        if ( b & mask )
+        {
+            register_write( REG_START_ENABLE, b & ~mask );
+            printf( "Start on %s disabled\n", oper_arg );
+        }
+        else
+        {
+            printf( "Start on %s already disabled\n", oper_arg );
+        }
+    }
+    else
+    {
+        fprintf( stderr, "Error accessing start register\n" );
+        return -1;
+    }
+
     return 0;
 }
 
@@ -744,19 +840,26 @@ void show_usage( char *progname )
     fprintf( stderr, "      -a --address <addr>     Use I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
     fprintf( stderr, "      -b --bus <bus>          Use I2C <bus> instead of %d.\n", i2c_bus );
     fprintf( stderr, "      -B --battery <1-3>      Set battery charge rate in thirds of an amp.\n" );
-    fprintf( stderr, "      -C --enable             Charger enable.\n" );
-    fprintf( stderr, "      -c --disable            Charger disable (power will be lost if no battery!).\n" );
-    fprintf( stderr, "      -e --eeprom             Store current settings in EEPROM.\n" );
+    fprintf( stderr, "      -C                      Charger enable.\n" );
+    fprintf( stderr, "      -c                      Charger disable (power will be lost if no battery!).\n" );
+    fprintf( stderr, "      -d --disable <setting>  Disable power-up setting:\n" );
+    fprintf( stderr, "                  button          Button pressed\n" );
+    fprintf( stderr, "                  opto            External opto signal\n" );
+    fprintf( stderr, "                  pgood           DC power good\n" );
+    fprintf( stderr, "                  timeout         Countdown timer\n" );
+    fprintf( stderr, "                  poweron         Initial power\n" );
+    fprintf( stderr, "      -e --enable  <setting>  Enable power-up setting (same as above)\n" );
     fprintf( stderr, "      -q --query              Query board info.\n" );
-    fprintf( stderr, "      -t --timeout            Set power-on timeout value.\n" );
     fprintf( stderr, "      -r --read               Read and display board RTC value.\n" );
     fprintf( stderr, "      -R --set                Set system time from RTC.\n" );
+    fprintf( stderr, "      -s --eeprom             Store current settings in EEPROM.\n" );
+    fprintf( stderr, "      -t --timeout            Set power-on timeout value.\n" );
     fprintf( stderr, "      -v --value <setting>    Return numeric value (for scripts) of:\n" );
-    fprintf( stderr, "                  button        Button pressed (0-1)\n" );
-    fprintf( stderr, "                  pgood         DC power good (0-1)\n" );
-    fprintf( stderr, "                  rate          Charge rate (1-3)\n" );
-    fprintf( stderr, "                  ontime        Power duration (seconds)\n" );
-    fprintf( stderr, "                  offtime       Last power off duration (seconds)\n" );
+    fprintf( stderr, "                  button          Button pressed (0-1)\n" );
+    fprintf( stderr, "                  pgood           DC power good (0-1)\n" );
+    fprintf( stderr, "                  rate            Charge rate (1-3)\n" );
+    fprintf( stderr, "                  ontime          Power duration (seconds)\n" );
+    fprintf( stderr, "                  offtime         Last power off duration (seconds)\n" );
     fprintf( stderr, "      -w --write              Write RTC from system time.\n" );
     fprintf( stderr, "      -X --calibrate          Set RTC calibration value.\n" );
     fprintf( stderr, "      -x                      Read RTC calibration value.\n" );
@@ -777,13 +880,14 @@ void parse( int argc, char *argv[] )
             { "address",    1,  NULL,   'a'   },
             { "bus",        1,  NULL,   'b'   },
             { "battery",    1,  NULL,   'B'   },
-            { "disable",    0,  NULL,   'c'   },
-            { "enable",     0,  NULL,   'C'   },
-            { "eeprom",     0,  NULL,   'e'   },
+            { "disable",    0,  NULL,   'd'   },
+            { "enable",     0,  NULL,   'e'   },
             { "query",      0,  NULL,   'q'   },
+            { "eeprom",     0,  NULL,   's'   },
             { "timeout",    1,  NULL,   't'   },
             { "read",       0,  NULL,   'r'   },
             { "set",        0,  NULL,   's'   },
+            { "value",      1,  NULL,   'v'   },
             { "write",      0,  NULL,   'w'   },
             { "calibrate",  1,  NULL,   'X'   },
             { "reset",      0,  NULL,   'z'   },
@@ -792,7 +896,7 @@ void parse( int argc, char *argv[] )
         };
         int c;
 
-        c = getopt_long( argc, argv, "?a:b:B:cCdeh:mn:qrRs:t:wxX:zZ:", lopts, NULL );
+        c = getopt_long( argc, argv, "?a:b:B:cCd:e:h:mn:qrRst:v:wxX:zZ:", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -849,28 +953,58 @@ void parse( int argc, char *argv[] )
             
             case 'c':
             {
-                operation = OP_DISABLE;
+                operation = OP_CHARGE_DISABLE;
                 break;
             }
             
             case 'C':
             {
-                operation = OP_ENABLE;
-                break;
-            }
-
-            case 'e':
-            {
-                operation = OP_EEPROM;
+                operation = OP_CHARGE_ENABLE;
                 break;
             }
             
+            case 'd':
+            {
+                if ( optarg != NULL )
+                {
+                    oper_arg = optarg;
+                    operation = OP_DISABLE;
+                }
+                else
+                {
+                    fprintf( stderr, "Missing setting for disable\n" );
+                    operation = OP_NONE;
+                }
+                break;
+            }
+            
+            case 'e':
+            {
+                if ( optarg != NULL )
+                {
+                    oper_arg = optarg;
+                    operation = OP_ENABLE;
+                }
+                else
+                {
+                    fprintf( stderr, "Missing setting for enable\n" );
+                    operation = OP_NONE;
+                }
+                break;
+            }
+
             case 'q':
             {
                 operation = OP_QUERY;
                 break;
             }
 
+            case 's':
+            {
+                operation = OP_EEPROM;
+                break;
+            }
+            
             case 't':
             {
                 power_timeout = atoi( optarg );
@@ -997,18 +1131,30 @@ int main( int argc, char *argv[] )
             break;
         }
 
-        case OP_ENABLE:
+        case OP_CHARGE_ENABLE:
         {
             rc = cape_enable_charger();
             break;
         }
         
-        case OP_DISABLE:
+        case OP_CHARGE_DISABLE:
         {
             rc = cape_disable_charger();
             break;
         }
         
+        case OP_ENABLE:
+        {
+            rc = cape_enable_setting();
+            break;
+        }
+        
+        case OP_DISABLE:
+        {
+            rc = cape_disable_setting();
+            break;
+        }
+
         case OP_EEPROM:
         {
             rc = cape_write_eeprom();
