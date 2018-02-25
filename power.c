@@ -43,6 +43,7 @@ typedef enum
     OP_QUERY,
     OP_RESET,
     OP_UPLOAD,
+    OP_SET_I2C,
 } op_type;
 
 op_type operation = OP_NONE;
@@ -50,6 +51,7 @@ char *oper_arg = NULL;
 
 int i2c_bus = 1;
 int stm_address = STM_ADDRESS;
+int new_address = 0;
 int charge_rate = 1;
 int power_timeout = 0;
 int calibration_value = 0;
@@ -684,6 +686,12 @@ int cape_disable_charger( void )
 }
 
 
+int  cape_set_address( int new_addr )
+{
+    return command_write32( COMMAND_SET_I2C_ADDRESS, new_addr );
+}
+
+
 void boot_erase_flash( uint8_t addr )
 {
     register_write( BOOT_REG_ADDR, addr );
@@ -837,7 +845,8 @@ void show_usage( char *progname )
     fprintf( stderr, "Usage: %s [OPTION] \n", progname );
     fprintf( stderr, "   Options:\n" );
     fprintf( stderr, "      -h --help               Show usage.\n" );
-    fprintf( stderr, "      -a --address <addr>     Use I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
+    fprintf( stderr, "      -a --address <addr>     Use HAT at I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
+    fprintf( stderr, "      -A --i2c <addr>         Set HAT I2C address to <addr>.\n" );
     fprintf( stderr, "      -b --bus <bus>          Use I2C <bus> instead of %d.\n", i2c_bus );
     fprintf( stderr, "      -B --battery <1-3>      Set battery charge rate in thirds of an amp.\n" );
     fprintf( stderr, "      -C                      Charger enable.\n" );
@@ -877,7 +886,8 @@ void parse( int argc, char *argv[] )
         static const struct option lopts[] =
         {
             { "help",       0,  NULL,   'h'   },
-            { "address",    1,  NULL,   'a'   },
+            { "addr",       1,  NULL,   'a'   },
+            { "i2c",        1,  NULL,   'A'   },
             { "bus",        1,  NULL,   'b'   },
             { "battery",    1,  NULL,   'B'   },
             { "disable",    0,  NULL,   'd'   },
@@ -896,7 +906,7 @@ void parse( int argc, char *argv[] )
         };
         int c;
 
-        c = getopt_long( argc, argv, "?a:b:B:cCd:e:h:mn:qrRst:v:wxX:zZ:", lopts, NULL );
+        c = getopt_long( argc, argv, "?a:A:b:B:cCd:e:h:mn:qrRst:v:wxX:zZ:", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -919,6 +929,23 @@ void parse( int argc, char *argv[] )
                 break;
             }
             
+            case 'A':
+            {
+                int i;
+                
+                i = (int)strtol( optarg, NULL, 0 );
+                if ( ( i >= 0x08 ) && ( i <= 0x77 ) )
+                {
+                    new_address = i;
+                    operation = OP_SET_I2C;
+                }
+                else
+                {
+                    fprintf( stderr, "Invalid I2C address\n" );
+                }
+                break;
+            }
+
             case 'b':
             {
                 int i;
@@ -1217,6 +1244,12 @@ int main( int argc, char *argv[] )
         case OP_UPLOAD:
         {
             rc = boot_upload();
+            break;
+        }
+        
+        case OP_SET_I2C:
+        {
+            rc = cape_set_address( new_address );
             break;
         }
 
