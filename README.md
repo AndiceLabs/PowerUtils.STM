@@ -1,6 +1,6 @@
+![PowerHAT](https://andicelabs.com/wp-content/uploads/2018/01/PowerHAT_PiAplus_battery-1024x577.jpg)
 # Utilities for the Raspberry Pi Power HAT
 These are the command line utilities for interfacing with the Power HAT's components.
-
 ## Building and Installing
 First, clone this repository on your Raspberry Pi:
 `git clone https://github.com/AndiceLabs/PowerUtils.STM`
