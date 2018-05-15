@@ -44,6 +44,7 @@ typedef enum
     OP_RESET,
     OP_UPLOAD,
     OP_SET_I2C,
+    OP_VALUE,
 } op_type;
 
 op_type operation = OP_NONE;
@@ -692,6 +693,68 @@ int  cape_set_address( int new_addr )
 }
 
 
+int cape_show_value( void )
+{
+    uint32_t d;
+    uint8_t b;
+    
+    if ( strcasecmp( oper_arg, "button" ) == 0 )
+    {
+        if ( register_read( REG_STATUS, &b ) )
+            return 2;
+        
+        if ( b & STATUS_BUTTON )
+            printf( "1\n" );
+        else
+            printf( "0\n" );
+    }
+    else if ( strcasecmp( oper_arg, "pgood" ) == 0 )
+    {
+        if ( register_read( REG_STATUS, &b ) )
+            return 2;
+        
+        if ( b & STATUS_POWER_GOOD )
+            printf( "1\n" );
+        else
+            printf( "0\n" );
+    }
+    else if ( strcasecmp( oper_arg, "rate" ) == 0 )
+    {
+        if ( command_read8( COMMAND_GET_CHARGE_RATE, &b ) == 0 )
+        {
+            printf( "%d\n", b );
+        }
+        else return 2;
+    }
+    else if ( strcasecmp( oper_arg, "ontime" ) == 0 )
+    {
+        if ( command_read32( COMMAND_GET_ONTIME, &d ) == 0 )
+        {
+            printf( "%d\n", d );
+        }
+        else return 2;
+    }
+    else if ( strcasecmp( oper_arg, "offtime" ) == 0 )
+    {
+        if ( command_read32( COMMAND_GET_OFFTIME, &d ) == 0 )
+        {
+            printf( "%d\n", d );
+        }
+        else return 2;
+    }
+    else if ( strcasecmp( oper_arg, "restart" ) == 0 )
+    {
+        if ( command_read32( COMMAND_GET_RESTART_TIME, &d ) == 0 )
+        {
+            printf( "%d\n", d );
+        }
+        else return 2;
+    }
+    
+    return 0;
+}
+
+
 void boot_erase_flash( uint8_t addr )
 {
     register_write( BOOT_REG_ADDR, addr );
@@ -869,6 +932,7 @@ void show_usage( char *progname )
     fprintf( stderr, "                  rate            Charge rate (1-3)\n" );
     fprintf( stderr, "                  ontime          Power duration (seconds)\n" );
     fprintf( stderr, "                  offtime         Last power off duration (seconds)\n" );
+    fprintf( stderr, "                  restart         Power-up restart timer (seconds)\n" );
     fprintf( stderr, "      -w --write              Write RTC from system time.\n" );
     fprintf( stderr, "      -X --calibrate          Set RTC calibration value.\n" );
     fprintf( stderr, "      -x                      Read RTC calibration value.\n" );
@@ -890,8 +954,8 @@ void parse( int argc, char *argv[] )
             { "i2c",        1,  NULL,   'A'   },
             { "bus",        1,  NULL,   'b'   },
             { "battery",    1,  NULL,   'B'   },
-            { "disable",    0,  NULL,   'd'   },
-            { "enable",     0,  NULL,   'e'   },
+            { "disable",    1,  NULL,   'd'   },
+            { "enable",     1,  NULL,   'e'   },
             { "query",      0,  NULL,   'q'   },
             { "eeprom",     0,  NULL,   's'   },
             { "timeout",    1,  NULL,   't'   },
@@ -955,7 +1019,6 @@ void parse( int argc, char *argv[] )
                 if ( errno == 0 )
                 {
                     i2c_bus = i;
-                    printf( "Using I2C bus %d\n", i2c_bus );
                 }
                 break;
             }
@@ -1051,6 +1114,21 @@ void parse( int argc, char *argv[] )
                 break;
             }
 
+            case 'v':
+            {
+                if ( optarg != NULL )
+                {
+                    oper_arg = optarg;
+                    operation = OP_VALUE;
+                }
+                else
+                {
+                    fprintf( stderr, "Missing setting for disable\n" );
+                    operation = OP_NONE;
+                }
+                break;
+            }
+
             case 'w':
             {
                 operation = OP_WRITE_RTC;
@@ -1115,6 +1193,9 @@ int main( int argc, char *argv[] )
 
     parse( argc, argv );
 
+    if ( operation != OP_VALUE )
+        printf( "Using I2C bus %d\n", i2c_bus );
+    
     snprintf( filename, 19, "/dev/i2c-%d", i2c_bus );
     handle = open( filename, O_RDWR );
     if ( handle < 0 )
@@ -1130,11 +1211,12 @@ int main( int argc, char *argv[] )
         exit( 1 );
     }
 
-    if ( operation != OP_UPLOAD )
+    if ( operation != OP_UPLOAD ) 
     {
         if ( verify_product() )
         {
-            printf( "Board found at address 0x%X\n", stm_address );
+            if ( operation != OP_VALUE )
+                printf( "Board found at address 0x%X\n", stm_address );
         }
         else
         {
@@ -1250,6 +1332,12 @@ int main( int argc, char *argv[] )
         case OP_SET_I2C:
         {
             rc = cape_set_address( new_address );
+            break;
+        }
+
+        case OP_VALUE:
+        {
+            rc = cape_show_value();
             break;
         }
 
