@@ -366,13 +366,18 @@ int cape_write_rtc( void )
 {
     int rc = 1;
     unsigned int seconds = time( NULL );
-
-    printf( "System seconds %08X (%d)\n", seconds, seconds );
-    printf( ctime( (time_t*)&seconds ) );
+    unsigned int t = seconds;
+    
+    while ( seconds == t )
+    {
+        seconds = time( NULL );
+    }
 
     if ( command_write32( COMMAND_WRITE_COUNT, seconds ) == 0 )
     {
         rc = 0;
+        printf( "System seconds %08X (%d)\n", seconds, seconds );
+        printf( ctime( (time_t*)&seconds ) );
     }
     else fprintf( stderr, "Error writing board RTC\n" );
 
@@ -794,7 +799,7 @@ int boot_enter( void )
             
             if ( command_wait( COMMAND_ENTER_BOOTLOADER ) == 0 )
             {
-                msleep( 300 );
+                sleep( 1 );
                 
                 register_read( REG_ID, &b );
                 if ( b == 0xBB )
@@ -920,17 +925,18 @@ void show_usage( char *progname )
     fprintf( stderr, "                  pgood           DC power good\n" );
     fprintf( stderr, "                  timeout         Countdown timer\n" );
     fprintf( stderr, "                  poweron         Initial power\n" );
+    fprintf( stderr, "                  auto-off        Auto power-off by VCC (cape) or GPIO26 (HAT)\n" );
     fprintf( stderr, "      -e --enable  <setting>  Enable power-up setting (same as above)\n" );
     fprintf( stderr, "      -q --query              Query board info.\n" );
     fprintf( stderr, "      -r --read               Read and display board RTC value.\n" );
     fprintf( stderr, "      -R --set                Set system time from RTC.\n" );
-    fprintf( stderr, "      -s --eeprom             Store current settings in EEPROM.\n" );
+    fprintf( stderr, "      -s --store              Store current settings in EEPROM.\n" );
     fprintf( stderr, "      -t --timeout            Set power-on timeout value.\n" );
     fprintf( stderr, "      -v --value <setting>    Return numeric value (for scripts) of:\n" );
     fprintf( stderr, "                  button          Button pressed (0-1)\n" );
     fprintf( stderr, "                  pgood           DC power good (0-1)\n" );
     fprintf( stderr, "                  rate            Charge rate (1-3)\n" );
-    fprintf( stderr, "                  ontime          Power duration (seconds)\n" );
+    fprintf( stderr, "                  ontime          Powered duration (seconds)\n" );
     fprintf( stderr, "                  offtime         Last power off duration (seconds)\n" );
     fprintf( stderr, "                  restart         Power-up restart timer (seconds)\n" );
     fprintf( stderr, "      -w --write              Write RTC from system time.\n" );
@@ -957,7 +963,7 @@ void parse( int argc, char *argv[] )
             { "disable",    1,  NULL,   'd'   },
             { "enable",     1,  NULL,   'e'   },
             { "query",      0,  NULL,   'q'   },
-            { "eeprom",     0,  NULL,   's'   },
+            { "store",      0,  NULL,   's'   },
             { "timeout",    1,  NULL,   't'   },
             { "read",       0,  NULL,   'r'   },
             { "set",        0,  NULL,   's'   },
