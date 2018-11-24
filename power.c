@@ -45,6 +45,7 @@ typedef enum
     OP_UPLOAD,
     OP_SET_I2C,
     OP_VALUE,
+    OP_EXT_POWER,
 } op_type;
 
 op_type operation = OP_NONE;
@@ -229,7 +230,6 @@ int register_block_write( unsigned char reg, unsigned char *data, unsigned char 
 int command_wait( uint8_t command )
 {
     uint8_t r = 0xEE;
-    int rc = -1;
     
     if ( register_write( REG_COMMAND, command ) == 0 )
     {
@@ -239,13 +239,32 @@ int command_wait( uint8_t command )
                 break;
         } while ( r == command );
         
-        if ( r == 0 )
+        switch ( r )
         {
-            rc = 0;
+            case 0xEA:
+            {
+                fprintf( stderr, "Command error: invalid address\n" );
+                break;
+            }
+            case 0xEC:
+            {
+                fprintf( stderr, "Command error: invalid command\n" );
+                break;
+            }
+            case 0xEE:
+            {
+                fprintf( stderr, "Command or state error\n" );
+                break;
+            }
+            default:
+            case 0:
+            {
+                break;
+            }
         }
     }
     
-    return rc;
+    return (int)r;
 }
 
 
@@ -760,6 +779,26 @@ int cape_show_value( void )
 }
 
 
+int set_external_power( void )
+{
+    if ( ( strcasecmp( oper_arg, "1" ) == 0 ) ||
+         ( strcasecmp( oper_arg, "on" ) == 0 ) ||
+         ( strcasecmp( oper_arg, "yes" ) == 0 ) ||
+         ( strcasecmp( oper_arg, "true" ) == 0 ) )
+    {
+        return command_wait( COMMAND_EXT_PWR_ON );
+    }
+    else if ( ( strcasecmp( oper_arg, "0" ) == 0 ) ||
+         ( strcasecmp( oper_arg, "off" ) == 0 ) ||
+         ( strcasecmp( oper_arg, "no" ) == 0 ) ||
+         ( strcasecmp( oper_arg, "false" ) == 0 ) )
+    {
+        return command_wait( COMMAND_EXT_PWR_OFF );
+    }
+    else fprintf( stderr, "Unknown argument for external power command." );
+}
+
+
 void boot_erase_flash( uint8_t addr )
 {
     register_write( BOOT_REG_ADDR, addr );
@@ -912,13 +951,13 @@ void show_usage( char *progname )
 {
     fprintf( stderr, "Usage: %s [OPTION] \n", progname );
     fprintf( stderr, "   Options:\n" );
-    fprintf( stderr, "      -h --help               Show usage.\n" );
-    fprintf( stderr, "      -a --address <addr>     Use HAT at I2C <addr> instead of 0x%02X.\n", STM_ADDRESS );
-    fprintf( stderr, "      -A --i2c <addr>         Set HAT I2C address to <addr>.\n" );
-    fprintf( stderr, "      -b --bus <bus>          Use I2C <bus> instead of %d.\n", i2c_bus );
-    fprintf( stderr, "      -B --battery <1-3>      Set battery charge rate in thirds of an amp.\n" );
-    fprintf( stderr, "      -C                      Charger enable.\n" );
-    fprintf( stderr, "      -c                      Charger disable (power will be lost if no battery!).\n" );
+    fprintf( stderr, "      -h --help               Show usage\n" );
+    fprintf( stderr, "      -a --address <addr>     Use HAT at I2C <addr> instead of 0x%02X\n", STM_ADDRESS );
+    fprintf( stderr, "      -A --i2c <addr>         Set HAT I2C address to <addr>\n" );
+    fprintf( stderr, "      -b --bus <bus>          Use I2C <bus> instead of %d\n", i2c_bus );
+    fprintf( stderr, "      -B --battery <1-3>      Set battery charge rate in thirds of an amp\n" );
+    fprintf( stderr, "      -C                      Charger enable\n" );
+    fprintf( stderr, "      -c                      Charger disable (power will be lost if no battery!)\n" );
     fprintf( stderr, "      -d --disable <setting>  Disable power-up setting:\n" );
     fprintf( stderr, "                  button          Button pressed\n" );
     fprintf( stderr, "                  opto            External opto signal\n" );
@@ -927,11 +966,13 @@ void show_usage( char *progname )
     fprintf( stderr, "                  poweron         Initial power\n" );
     fprintf( stderr, "                  auto-off        Auto power-off by VCC (cape) or GPIO26 (HAT)\n" );
     fprintf( stderr, "      -e --enable  <setting>  Enable power-up setting (same as above)\n" );
-    fprintf( stderr, "      -q --query              Query board info.\n" );
-    fprintf( stderr, "      -r --read               Read and display board RTC value.\n" );
-    fprintf( stderr, "      -R --set                Set system time from RTC.\n" );
-    fprintf( stderr, "      -s --store              Store current settings in EEPROM.\n" );
-    fprintf( stderr, "      -t --timeout            Set power-on timeout value.\n" );
+    fprintf( stderr, "      -p --power              External power off/on (0-1)\n" );
+    fprintf( stderr, "                              On the HAT/Cape, this is the external LED connector\n" );
+    fprintf( stderr, "      -q --query              Query board info\n" );
+    fprintf( stderr, "      -r --read               Read and display board RTC value\n" );
+    fprintf( stderr, "      -R --set                Set system time from RTC\n" );
+    fprintf( stderr, "      -s --store              Store current settings in EEPROM\n" );
+    fprintf( stderr, "      -t --timeout            Set power-on timeout value\n" );
     fprintf( stderr, "      -v --value <setting>    Return numeric value (for scripts) of:\n" );
     fprintf( stderr, "                  button          Button pressed (0-1)\n" );
     fprintf( stderr, "                  pgood           DC power good (0-1)\n" );
@@ -939,11 +980,11 @@ void show_usage( char *progname )
     fprintf( stderr, "                  ontime          Powered duration (seconds)\n" );
     fprintf( stderr, "                  offtime         Last power off duration (seconds)\n" );
     fprintf( stderr, "                  restart         Power-up restart timer (seconds)\n" );
-    fprintf( stderr, "      -w --write              Write RTC from system time.\n" );
-    fprintf( stderr, "      -X --calibrate          Set RTC calibration value.\n" );
-    fprintf( stderr, "      -x                      Read RTC calibration value.\n" );
-    fprintf( stderr, "      -z --reset              Restart power controller.\n" );
-    fprintf( stderr, "      -Z --upload <file>      Upload firmware image.\n" );
+    fprintf( stderr, "      -w --write              Write RTC from system time\n" );
+    fprintf( stderr, "      -X --calibrate          Set RTC calibration value\n" );
+    fprintf( stderr, "      -x                      Read RTC calibration value\n" );
+    fprintf( stderr, "      -z --reset              Restart power controller\n" );
+    fprintf( stderr, "      -Z --upload <file>      Upload firmware image\n" );
     fprintf( stderr, "\n" );
     exit( 1 );
 }
@@ -962,6 +1003,7 @@ void parse( int argc, char *argv[] )
             { "battery",    1,  NULL,   'B'   },
             { "disable",    1,  NULL,   'd'   },
             { "enable",     1,  NULL,   'e'   },
+            { "power",      1,  NULL,   'p'   },
             { "query",      0,  NULL,   'q'   },
             { "store",      0,  NULL,   's'   },
             { "timeout",    1,  NULL,   't'   },
@@ -976,7 +1018,7 @@ void parse( int argc, char *argv[] )
         };
         int c;
 
-        c = getopt_long( argc, argv, "?a:A:b:B:cCd:e:h:mn:qrRst:v:wxX:zZ:", lopts, NULL );
+        c = getopt_long( argc, argv, "?a:A:b:B:cCd:e:h:mn:p:qrRst:v:wxX:zZ:", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -1080,6 +1122,21 @@ void parse( int argc, char *argv[] )
                 {
                     oper_arg = optarg;
                     operation = OP_ENABLE;
+                }
+                else
+                {
+                    fprintf( stderr, "Missing setting for enable\n" );
+                    operation = OP_NONE;
+                }
+                break;
+            }
+
+            case 'p':
+            {
+                if ( optarg != NULL )
+                {
+                    oper_arg = optarg;
+                    operation = OP_EXT_POWER;
                 }
                 else
                 {
@@ -1344,6 +1401,12 @@ int main( int argc, char *argv[] )
         case OP_VALUE:
         {
             rc = cape_show_value();
+            break;
+        }
+        
+        case OP_EXT_POWER:
+        {
+            rc = set_external_power();
             break;
         }
 
