@@ -494,9 +494,28 @@ int cape_show_cape_info( void )
     }
     else return -1;    
 
+    if ( register_read( REG_STATUS, &c ) == 0 )
+    {
+        printf( "Status       : " );
+        if ( c == 0 ) 
+        {
+            printf( "none " );
+        }
+        else
+        {
+            if ( c & STATUS_POWER_GOOD ) printf( "PGOOD " );
+            if ( c & STATUS_BUTTON ) printf( "BUTTON " );
+            if ( c & STATUS_OPTO ) printf( "OPTO " );
+            if ( c & STATUS_LED ) printf( "LED " );
+            if ( c & STATUS_EXT_POWER ) printf( "EXT_PWR" );
+        }
+        printf ( "\n\n" );
+    }
+    else return -1;
+    
     if ( register_read( REG_START_REASON, &c ) == 0 )
     {
-        printf( "Powered on triggered by " );
+        printf( "Power on triggered by " );
         if ( c == 0 ) 
         {
             printf( "nothing " );
@@ -506,14 +525,14 @@ int cape_show_cape_info( void )
             if ( c & START_BUTTON ) printf( "button press " );
             if ( c & START_EXTERNAL ) printf( "external event " );
             if ( c & START_PWRGOOD ) printf( "power good " );
-            if ( c & START_TIMEOUT ) printf( "timer" );
-            if ( c & START_PWR_ON ) printf( "inital power" );
-            if ( c & START_WDT_RESET ) printf( "watchdog reset" );
+            if ( c & START_TIMEOUT ) printf( "timer " );
+            if ( c & START_PWR_ON ) printf( "inital power " );
+            if ( c & START_WDT_RESET ) printf( "watchdog reset " );
         }
         printf ( "\n\n" );
     }
     else return -1;
-    
+
     return 0;
 }
 

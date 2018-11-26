@@ -71,6 +71,8 @@ enum registers_type {
 #define STATUS_POWER_GOOD           0x01    // PG state 
 #define STATUS_BUTTON               0x02    // Button state
 #define STATUS_OPTO                 0x04    // Opto state
+#define STATUS_LED                  0x08    // LED state
+#define STATUS_EXT_POWER            0x10    // External power state
 #define STATUS_FLASH_LOCK           0x20    // 
 #define STATUS_MFG_LOCK             0x40    // 
 #define STATUS_BOOTLOADER           0x80    // Capability
