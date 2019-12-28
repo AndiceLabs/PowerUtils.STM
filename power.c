@@ -884,7 +884,8 @@ int boot_enter( void )
     }
     else
     {
-        printf( "Found bootloader.\n" );
+        register_read( REG_PROD, &b );
+        printf( "Found bootloader level %d.\n", b );
     }
     
     return rc;
