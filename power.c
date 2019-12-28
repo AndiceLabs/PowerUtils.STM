@@ -57,7 +57,7 @@ int new_address = 0;
 int charge_rate = 1;
 int power_timeout = 0;
 int calibration_value = 0;
-int handle;
+int handle = 0;
 
 #define MAX_IMAGE_SIZE      ( 1024 * 16 )
 #define FLASH_PAGE_SIZE     ( 128 )
@@ -429,7 +429,7 @@ int cape_show_cape_info( void )
     {
         if ( isprint( step ) && isprint( revision ) )
         {
-            printf( "Revision     : %c%c\n", step, revision );
+            printf( "HW Revision  : %c%c\n", step, revision );
         }
     }
     else return -1;
