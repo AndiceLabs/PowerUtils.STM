@@ -366,17 +366,30 @@ int cape_read_rtc( time_t *iptr )
 
     if ( command_read32( COMMAND_READ_COUNT, &seconds ) == 0 )
     {
-        printf( "Cape RTC seconds %08X (%d)\n", seconds, seconds );
-        printf( ctime( (time_t*)&seconds ) );
-
         if ( iptr != NULL )
         {
             *iptr = seconds;
         }
         rc = 0;
     }
-    else fprintf( stderr, "Error reading board RTC\n" );
 
+    return rc;
+}
+
+
+int cape_show_rtc( void )
+{
+    int rc;
+    time_t seconds;
+    
+    rc = cape_read_rtc( &seconds );
+    if ( rc == 0 )
+    {
+        printf( "Cape RTC seconds %08X (%d)\n", seconds, seconds );
+        printf( ctime( (time_t*)&seconds ) );
+    }
+    else fprintf( stderr, "Error reading board RTC\n" );
+    
     return rc;
 }
 
@@ -1361,7 +1374,7 @@ int main( int argc, char *argv[] )
         
         case OP_READ_RTC:
         {
-            rc = cape_read_rtc( NULL );
+            rc = cape_show_rtc();
             break;
         }
 
