@@ -234,7 +234,7 @@ int command_wait( uint8_t command )
     if ( register_write( REG_COMMAND, command ) == 0 )
     {
         do {
-            msleep( 100 );
+            msleep( 1 );
             if ( register_read( REG_COMMAND, &r ) != 0 )
                 break;
         } while ( r == command );
@@ -396,20 +396,19 @@ int cape_show_rtc( void )
 
 int cape_write_rtc( void )
 {
+    struct timeval t;
     int rc = 1;
-    unsigned int seconds = time( NULL );
-    unsigned int t = seconds;
-    
-    while ( seconds == t )
-    {
-        seconds = time( NULL );
-    }
 
-    if ( command_write32( COMMAND_WRITE_COUNT, seconds ) == 0 )
+    // Align close to system second
+    gettimeofday( &t, NULL );
+    usleep( 999999 - t.tv_usec );
+    gettimeofday( &t, NULL );
+    
+    if ( command_write32( COMMAND_WRITE_COUNT, t.tv_sec ) == 0 )
     {
         rc = 0;
-        printf( "System seconds %08X (%d)\n", seconds, seconds );
-        printf( ctime( (time_t*)&seconds ) );
+        printf( "System seconds %08X (%d)\n", t.tv_sec, t.tv_sec );
+        printf( ctime( &t.tv_sec ) );
     }
     else fprintf( stderr, "Error writing board RTC\n" );
 
