@@ -51,7 +51,11 @@ typedef enum
 op_type operation = OP_NONE;
 char *oper_arg = NULL;
 
-int i2c_bus = 1;
+#ifdef BEAGLEBONE
+ int i2c_bus = 2;
+#else
+ int i2c_bus = 1;
+#endif
 int stm_address = STM_ADDRESS;
 int new_address = 0;
 int charge_rate = 1;

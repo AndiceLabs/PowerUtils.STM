@@ -32,7 +32,11 @@ typedef enum {
 op_type operation = OP_DUMP;
 
 int interval = 60;
-int i2c_bus = 1;
+#ifdef BEAGLEBONE
+ int i2c_bus = 2;
+#else
+ int i2c_bus = 1;
+#endif
 int i2c_address = INA_ADDRESS;
 int handle;
 int whole_numbers = 0;
