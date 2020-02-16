@@ -117,6 +117,9 @@ enum registers_type {
 #define COMMAND_WRITE_COUNT         0x21
 #define COMMAND_SET_I2C_ADDRESS     0x22
 #define COMMAND_SET_RTC_ADDRESS     0x23
+#define COMMAND_DISARM_VCC          0x24    // ignore VCC or GPIO26
+#define COMMAND_ARM_VCC             0x25
+#define COMMAND_LOADER_TIMESTAMP    0x2F
 
 #define COMMAND_GET_RTC_CAL         0x30
 #define COMMAND_SET_RTC_CAL         0x31
