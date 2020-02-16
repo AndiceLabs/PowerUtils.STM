@@ -873,7 +873,7 @@ int boot_enter( void )
             
             if ( command_wait( COMMAND_ENTER_BOOTLOADER ) == 0 )
             {
-                sleep( 1 );
+                sleep( 2 );
                 
                 register_read( REG_ID, &b );
                 if ( b == 0xBB )
