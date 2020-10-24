@@ -46,6 +46,7 @@ typedef enum
     OP_SET_I2C,
     OP_VALUE,
     OP_EXT_POWER,
+	OP_POWERDOWN_WDT,
 } op_type;
 
 op_type operation = OP_NONE;
@@ -834,6 +835,32 @@ int set_external_power( void )
 }
 
 
+int set_powerdown_wdt( void )
+{
+    int rc = 0;
+    int i;
+    
+    if ( oper_arg )
+    {
+        i = atoi( oper_arg );
+        if ( ( i >= 0 ) && ( i <= 255 ) )
+        {
+            rc = register_write( REG_WDT_STOP, (unsigned char)i );
+        }
+        else
+        {
+            fprintf( stderr, "Invalid power-off WDT time (1-255)\n" );
+            rc = 1;
+        }
+    }
+    else
+    {
+        fprintf( stderr, "Error: Power-off WDT requires argument in seconds\n" );
+        rc = 1;
+    }
+}
+
+
 void boot_erase_flash( uint8_t addr )
 {
     register_write( BOOT_REG_ADDR, addr );
@@ -1002,6 +1029,7 @@ void show_usage( char *progname )
     fprintf( stderr, "                  poweron         Initial power\n" );
     fprintf( stderr, "                  auto-off        Auto power-off by VCC (cape) or GPIO26 (HAT)\n" );
     fprintf( stderr, "      -e --enable  <setting>  Enable power-up setting (same as above)\n" );
+    fprintf( stderr, "      -k --killpower          Set power-off WDT timer (0-255 seconds)\n" );
     fprintf( stderr, "      -p --power              External power off/on (0-1)\n" );
     fprintf( stderr, "                              On the HAT/Cape, this is the external LED connector\n" );
     fprintf( stderr, "      -q --query              Query board info\n" );
@@ -1039,6 +1067,7 @@ void parse( int argc, char *argv[] )
             { "battery",    1,  NULL,   'B'   },
             { "disable",    1,  NULL,   'd'   },
             { "enable",     1,  NULL,   'e'   },
+            { "killpower",  1,  NULL,   'k'   },
             { "power",      1,  NULL,   'p'   },
             { "query",      0,  NULL,   'q'   },
             { "store",      0,  NULL,   's'   },
@@ -1054,7 +1083,7 @@ void parse( int argc, char *argv[] )
         };
         int c;
 
-        c = getopt_long( argc, argv, "?a:A:b:B:cCd:e:h:mn:p:qrRst:v:wxX:zZ:", lopts, NULL );
+        c = getopt_long( argc, argv, "?a:A:b:B:cCd:e:h:k:p:qrRst:v:wxX:zZ:", lopts, NULL );
 
         if ( c == -1 )
             break;
@@ -1166,6 +1195,21 @@ void parse( int argc, char *argv[] )
                 }
                 break;
             }
+
+            case 'k':
+            {
+                if ( optarg != NULL )
+                {
+                    oper_arg = optarg;
+                    operation = OP_POWERDOWN_WDT;
+                }
+                else
+                {
+                    fprintf( stderr, "Missing setting for power-down watchdog\n" );
+                    operation = OP_NONE;
+                }
+                break;
+			}
 
             case 'p':
             {
@@ -1443,6 +1487,12 @@ int main( int argc, char *argv[] )
         case OP_EXT_POWER:
         {
             rc = set_external_power();
+            break;
+        }
+        
+        case OP_POWERDOWN_WDT:
+        {
+            rc = set_powerdown_wdt();
             break;
         }
 
